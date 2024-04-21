@@ -1,0 +1,39 @@
+library(dplyr)
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(caret)
+
+df_marketing <- read.csv("C:/Users/clare/Downloads/ISM 6423 final report datasets/Marketing_Data.csv")
+df_user <- read.csv("C:/Users/clare/Downloads/ISM 6423 final report datasets/User_Data.csv")
+df_advertising <- read.csv("C:/Users/clare/Downloads/ISM 6423 final report datasets/Advertising_Data.csv")
+
+
+# Feature Engineering for test data
+test_data <- test_data %>%
+  mutate(interaction_term = mark_spent * time_spent,
+         squared_time_spent = time_spent^2)
+
+# Selecting relevant columns for the model
+test_data <- test_data %>%
+  select(mark_spent, time_spent, interaction_term, squared_time_spent, Product_Sold) %>%
+  na.omit()
+
+# Scaling test data
+x_test <- as.matrix(scale(test_data[, -ncol(test_data)]))
+
+# Predicting on test set
+predictions <- predict(lasso_model, s = best_lambda, newx = x_test)
+
+# Calculating RMSE
+rmse <- sqrt(mean((predictions - test_data$Product_Sold)^2))
+print(paste("Root Mean Squared Error (Lasso):", rmse))
+
+# Plotting actual vs predicted values
+ggplot(test_data, aes(x = Product_Sold, y = predictions)) +
+  geom_point() +
+  geom_smooth(method = lm, col = "blue") +
+  labs(title = "Actual vs Predicted Sales (Lasso)", x = "Actual Sales", y = "Predicted Sales")
+
+
+
