@@ -21,30 +21,54 @@ MM_train <- marketing_mix_df[trainIndex, -1]
 MM_test <- marketing_mix_df[-trainIndex, -1]
 
 # Train linear regression model on marketing mix data using log to adjust for skewedness
-LM1 <- lm(Sales ~ log(TikTok + 1) + log(Facebook + 1) + log(Google.Ads + 1), data=MM_train)
+linear <- train(Sales ~ log(TikTok + 1) + log(Facebook + 1) + log(Google.Ads + 1), data=MM_train,
+                method='lm',
+                metric='Rsquared')
 
 # View the summary for the linear regression model
-print(summary(LM1))
+print(summary(linear))
 
-# Use test data for prediction with the linear regression model
-LM1_results <- predict(LM1, MM_test[, -5])
-
-# Compare the predictions with the actual values using error metrics
-mae_LM1  <- MAE(LM1_results, MM_test$Sales)
-rmse_LM1 <- RMSE(LM1_results, MM_test$Sales)
-print(paste('RMSE: ', rmse_LM1, ' MAE: ', mae_LM1))
-
-# Train generalized linear regression model on marketing mix data with tuning
+# Train LASSO model on marketing mix data
 tuneControl <- trainControl(method='cv', number=5)
-LM2 <- train(Sales ~. , data=MM_train, 
+gridParameters <- seq(0.1, 5, 20)
+
+lasso <- train(Sales ~. , data=MM_train, 
             method='glmnet', 
-            trControl=tuneControl, 
-            tuneLength=25)
+            trControl=tuneControl,
+            tuneGrid=expand.grid(alpha=1, lambda=gridParameters),
+            metric='Rsquared')
 
-# Use test data for prediction with the generalized linear regression model
-LM2_results <- predict(LM2, MM_test[, -5])
+ridge <- train(Sales ~. , data=MM_train, 
+               method='glmnet', 
+               trControl=tuneControl,
+               tuneGrid=expand.grid(alpha=0, lambda=gridParameters),
+               metric='Rsquared')
 
-# Compare the predictions with the actual values using error metrics
-mae_LM2 <- MAE(LM2_results, MM_test$Sales)
-rmse_LM2 <- RMSE(LM2_results, MM_test$Sales)
-print(paste('RMSE: ', rmse_LM2, ' MAE: ', mae_LM2))
+# Compare the coefficients from the different models
+data.frame(
+  ridge = as.data.frame.matrix(coef(ridge$finalModel, ridge$finalModel$lambdaOpt)),
+  lasso = as.data.frame.matrix(coef(lasso$finalModel, lasso$finalModel$lambdaOpt)), 
+  linear = linear$finalModel$coefficients
+) %>% rename(ridge=s1, lasso=s1.1)
+
+# Compare the results of the different models using different error metrics
+predictions_ridge <- predict(ridge, MM_test[, 1:3])
+predictions_lasso <- predict(lasso, MM_test[, 1:3])
+predictions_linear <- predict(linear, MM_test[, 1:3])
+
+values <- matrix(
+  c(R2(predictions_ridge, MM_test$Sales), 
+    R2(predictions_lasso, MM_test$Sales), 
+    R2(predictions_linear, MM_test$Sales),
+    RMSE(predictions_ridge, MM_test$Sales),
+    RMSE(predictions_lasso, MM_test$Sales),
+    RMSE(predictions_linear, MM_test$Sales),
+    MAE(predictions_ridge, MM_test$Sales),
+    MAE(predictions_lasso, MM_test$Sales),
+    MAE(predictions_linear, MM_test$Sales)),
+  nrow=3,
+  ncol=3
+)
+results <- data.frame(values)
+rownames(results) <- c('R2', 'RMSE', 'MAE')
+colnames(results) <- c('Ridge', 'Lasso', 'Linear')
